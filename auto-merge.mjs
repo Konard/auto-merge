@@ -22,6 +22,7 @@
 //  • Extensive debugging output has been added at each API call and decision point.
 //  • If all conditions pass and the PR is mergeable and approved, the script issues the GitHub API merge call.
 //  • Optionally, after a successful merge, the script prompts to push a new tag.
+//  • You can now pass `-y` or `--auto-approve` to skip all interactive confirmations.
 
 import path from "path";
 import fs from "fs";
@@ -64,12 +65,23 @@ debug("GITHUB_TOKEN is set.");
 // ---------------------
 // Configuration and Input Parsing
 // ---------------------
-const prUrl = process.argv[2];
-const bumpType = process.argv[3];
-debug(`Received arguments: prUrl=${prUrl}, bumpType=${bumpType}`);
+const rawArgs = process.argv.slice(2);
+let autoApprove = false;
+const args = [];
+for (const arg of rawArgs) {
+  if (arg === "-y" || arg === "--auto-approve") {
+    autoApprove = true;
+    debug(`Auto-approve enabled via flag ${arg}`);
+  } else {
+    args.push(arg);
+  }
+}
+const prUrl = args[0];
+const bumpType = args[1];
+debug(`Received arguments: prUrl=${prUrl}, bumpType=${bumpType}, autoApprove=${autoApprove}`);
 
 if (!prUrl || !bumpType) {
-  console.error("Usage: node auto-merge.mjs <pull_request_url> <patch|minor|major>");
+  console.error("Usage: node auto-merge.mjs [-y|--auto-approve] <pull_request_url> <patch|minor|major>");
   process.exit(1);
 }
 if (!["patch", "minor", "major"].includes(bumpType)) {
@@ -84,7 +96,7 @@ if (!match) {
   console.error("Error: Invalid pull request URL format. Expected format: https://github.com/owner/repo/pull/123");
   process.exit(1);
 }
-const [ , owner, repo, pullNumber ] = match;
+const [, owner, repo, pullNumber] = match;
 debug(`Parsed PR URL: owner=${owner}, repo=${repo}, pullNumber=${pullNumber}`);
 
 // Common GitHub API headers.
@@ -98,6 +110,10 @@ const headers = {
 // Utility: Interactive Confirmation
 // ---------------------
 async function confirmAction(description, commandText) {
+  if (autoApprove) {
+    debug(`Auto-approved action: ${description}`);
+    return true;
+  }
   console.log("\n================================================================================");
   console.log(`ACTION: ${description}`);
   console.log(`REPRODUCIBLE COMMAND/API CALL:\n${commandText}`);
